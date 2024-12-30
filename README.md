@@ -13,20 +13,20 @@ What is openpilot?
   </tr>
 </table>
 
-What is FrogPilot? 🐸
+What is ChubbsPilot? 
 ------
 
-FrogPilot is a fully open-sourced fork of openpilot, featuring clear and concise commits striving to be a resource for the openpilot developer community. It thrives on contributions from both users and developers, focusing on a collaborative, community-led approach to deliver an advanced openpilot experience for everyone!
-
+ChubbsPilot is a fully open-sourced fork of openpilot, featuring clear and concise commits striving to be a resource for the openpilot developer community. It thrives on contributions from both users and developers, focusing on a collaborative, community-led approach to deliver an advanced openpilot experience for everyone!
+ChubbsPilot is gets its core features from a multitude of forks like FrogPilot, SunnyPilot, OPGM, CarrotPilot, as well as my own features. 
 ------
-FrogPilot was last updated on:
+ChubbsPilot was last updated on:
 
-**December 21st, 2024**
+**December 30th, 2024**
 
 Features
 ------
 
-FrogPilot offers a wide range of customizable features that are easily toggled on or off to suit your preferences. Whether you want a completely stock openpilot experience, or want to add some fun and personal touches, FrogPilot has you covered! Some of the features include:
+ChubbsPilot offers a wide range of customizable features that are easily toggled on or off to suit your preferences. Whether you want a completely stock openpilot experience, or want to add some fun and personal touches, FrogPilot has you covered! Some of the features include:
 
 ------
 ⚡ **Advanced Customizations:**
@@ -40,7 +40,7 @@ FrogPilot offers a wide range of customizable features that are easily toggled o
 ------
 🎨 **Custom Themes:**
 
-  - 🐸 Frog theme (with a bonus 🐐 sound effect)
+  - 🐸 Frog theme #frogsgomoo (with a bonus 🐐 sound effect)
   - <img src="https://images.emojiterra.com/google/noto-emoji/unicode-15/color/512px/1f1f7-1f1fa.png" width="15" height="12"> Russia / Joseph Stalin theme
   - 🔌 Tesla theme
   - Holiday themes! Minor holidays last a day, while major holidays (Easter, Halloween, Thanksgiving, Christmas) last a week
@@ -81,7 +81,7 @@ FrogPilot offers a wide range of customizable features that are easily toggled o
 ------
 🚖 **Lateral Adjustments:**
 
-  - Activate lateral control by simply pressing the "Cruise Control" button
+  - Activate lateral control by simply pressing the "Cruise Control" button, or LKAS button (shout out SunnyHaibin)
   - Force comma's auto tuning for unsupported vehicles
   - Lateral control won't disengage on gas or brake
   - Nudgeless lane changes with lane detection to prevent driving into curbs or going offroad
@@ -93,6 +93,7 @@ FrogPilot offers a wide range of customizable features that are easily toggled o
 ------
 🚘 **Longitudinal Adjustments:**
 
+  - Advanced braking logic to significantly reduce hard braking (aka brake slams)
   - Aggressive acceleration when following a lead vehicle from a stop
   - "Map Turn Speed Controller" to slow down for curves based on stored map data
     - With an additional toggle to fine tune the speed aggressiveness
@@ -146,6 +147,7 @@ FrogPilot offers a wide range of customizable features that are easily toggled o
   - Disable openpilot longitudinal control to use your car's stock cruise control
   - GM Volt support
   - Honda Clarity support
+  - 2025 HKG Support CCnc
   - Increased torque for the Subaru Crosstrek
   - Lock doors automatically when in the drive gear for Toyota/Lexus and unlock when in park
   - openpilot longitudinal control for GM vehicles without ACC
@@ -155,6 +157,7 @@ FrogPilot offers a wide range of customizable features that are easily toggled o
 ------
 🚦 **Quality of Life Features:**
 
+  - Brake signal logic to display current speed value as red when brake lights are on. 
   - Automatic updates for a completely "set and forget" experience
   - Camera view selection
   - Custom alerts for green lights, vehicles in blindspot, lead departing, and the current speed limit changing
@@ -169,13 +172,13 @@ FrogPilot offers a wide range of customizable features that are easily toggled o
 How to Install
 ------
 
-Easiest way to install FrogPilot is via this URL at the installation screen:
+Easiest way to install ChubbsPilot is via this URL at the installation screen:
 
 ```
-frogpilot.download
+chubbspilot.download
 ```
 
-DO NOT install the "FrogPilot-Development" branch. I'm constantly breaking things on there, so unless you don't want to use openpilot, NEVER install it!
+DO NOT install the "ChubbsPilot-Development" branch. I'm constantly breaking things on there, so unless you don't want to use openpilot, NEVER install it!
 
 ![](https://i.imgur.com/swr0kqJ.png)
 
