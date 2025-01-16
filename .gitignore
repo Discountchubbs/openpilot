@@ -84,3 +84,6 @@ build/
 poetry.toml
 Pipfile
 merge-resolver.sh
+
+# Include ignored files during compilation process
+!.gitignore

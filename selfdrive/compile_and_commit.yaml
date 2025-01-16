@@ -1,0 +1,49 @@
+name: Compile and Commit
+
+on:
+  push:
+    branches:
+      - Chubbs
+  workflow_dispatch:
+
+jobs:
+  compile_and_commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Compile the project
+      run: scons -j$(nproc)
+
+    - name: Include ignored files
+      run: |
+        git add -f $(git ls-files --others --exclude-standard)
+
+    - name: Delete files that are deleted during compilation
+      run: |
+        git ls-files --deleted -z | xargs -0 git rm
+
+    - name: Commit and push changes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git checkout -b compiled-project
+        git add .
+        git commit -m "Compiled project"
+        git push --set-upstream origin compiled-project
