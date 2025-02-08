@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import os
 import time
-
+import threading
+from types import SimpleNamespace
 import cereal.messaging as messaging
 
 from cereal import car, custom
@@ -17,6 +18,7 @@ from openpilot.selfdrive.car.car_helpers import get_car, get_one_can
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.controls.lib.events import Events
 
+from openpilot.selfdrive.car.hyundai.chubbs.param_manager import ParamManager
 from openpilot.selfdrive.frogpilot.frogpilot_variables import get_frogpilot_toggles, update_frogpilot_toggles
 
 REPLAY = "REPLAY" in os.environ
@@ -108,6 +110,10 @@ class Car:
     self.params.put_nonblocking("CarParamsCache", cp_bytes)
     self.params.put_nonblocking("CarParamsPersistent", cp_bytes)
 
+    self.param_manager: ParamManager = ParamManager()
+    self.param_manager.update(self.params)
+    self._params_list: SimpleNamespace = self.param_manager.get_params()
+
     update_frogpilot_toggles()
 
   def state_update(self) -> car.CarState:
@@ -115,7 +121,7 @@ class Car:
 
     # Update carState from CAN
     can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
-    CS, FPCS = self.CI.update(self.CC_prev, can_strs, self.frogpilot_toggles)
+    CS, FPCS = self.CI.update(self.CC_prev, can_strs, self._params_list, self.frogpilot_toggles)
 
     self.sm.update(0)
 
@@ -206,14 +212,33 @@ class Car:
     self.initialized_prev = initialized
     self.CS_prev = CS.as_reader()
 
-  def card_thread(self):
-    while True:
-      self.step()
-      self.rk.monitor_time()
+  def fp_params_thread(self, event: threading.Event) -> None:
+    while not event.is_set():
+        self.param_manager.update(self.params)
+        self._params_list = self.param_manager.get_params()
+        time.sleep(0.1)
 
-      # Update FrogPilot parameters
-      if self.sm['frogpilotPlan'].togglesUpdated:
-        self.frogpilot_toggles = get_frogpilot_toggles()
+  def frogpilot_params_thread(self, event: threading.Event) -> None:
+    while not event.is_set():
+        if self.sm['frogpilotPlan'].togglesUpdated:
+            self.frogpilot_toggles = get_frogpilot_toggles()
+        time.sleep(0.1)
+
+  def card_thread(self):
+    event = threading.Event()
+    fp_thread = threading.Thread(target=self.fp_params_thread, args=(event,))
+    frog_thread = threading.Thread(target=self.frogpilot_params_thread, args=(event,))
+
+    try:
+        fp_thread.start()
+        frog_thread.start()
+        while True:
+            self.step()
+            self.rk.monitor_time()
+    finally:
+        event.set()
+        fp_thread.join()
+        frog_thread.join()
 
 def main():
   config_realtime_process(4, Priority.CTRL_HIGH)

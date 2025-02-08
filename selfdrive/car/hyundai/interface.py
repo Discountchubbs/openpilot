@@ -1,8 +1,10 @@
+import cereal.messaging as messaging
 from cereal import car, custom
 from panda import Panda
+from openpilot.common.params import Params
 from openpilot.selfdrive.car.hyundai.hyundaicanfd import CanBus
-from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_CAR, CAMERA_SCC_CAR, CANFD_RADAR_SCC_CAR, \
-                                         CANFD_UNSUPPORTED_LONGITUDINAL_CAR, EV_CAR, HYBRID_CAR, LEGACY_SAFETY_MODE_CAR, \
+from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, CAR, HyundaiFlagsCP, DBC, CANFD_CAR, CAMERA_SCC_CAR, CANFD_RADAR_SCC_CAR, \
+                                         CANFD_UNSUPPORTED_LONGITUDINAL_CAR, NON_SCC_CAR, EV_CAR, HYBRID_CAR, LEGACY_SAFETY_MODE_CAR, \
                                          UNSUPPORTED_LONGITUDINAL_CAR, Buttons
 from openpilot.selfdrive.car.hyundai.radar_interface import RADAR_START_ADDR
 from openpilot.selfdrive.car import create_button_events, get_safety_config
@@ -10,6 +12,9 @@ from openpilot.selfdrive.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.car.disable_ecu import disable_ecu
 
 from openpilot.selfdrive.frogpilot.frogpilot_variables import params
+from openpilot.selfdrive.car.hyundai.chubbs.longitudinal_tuning import HKGLongitudinalController
+from openpilot.selfdrive.car.hyundai.chubbs.enable_radar_tracks import enable_radar_tracks
+from openpilot.selfdrive.car.hyundai.chubbs.fingerprinting import can_fingerprint, get_one_can
 
 Ecu = car.CarParams.Ecu
 ButtonType = car.CarState.ButtonEvent.Type
@@ -94,14 +99,14 @@ class CarInterface(CarInterfaceBase):
         ret.longitudinalTuning.deadzoneV = [0.]
         ret.longitudinalTuning.kpV = [0.1]
         ret.longitudinalTuning.kiV = [0.0]
-      ret.experimentalLongitudinalAvailable = candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
+      ret.experimentalLongitudinalAvailable = candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR | NON_SCC_CAR)
     else:
       if not use_new_api:
         ret.longitudinalTuning.deadzoneBP = [0.]
         ret.longitudinalTuning.deadzoneV = [0.]
         ret.longitudinalTuning.kpV = [0.5]
         ret.longitudinalTuning.kiV = [0.0]
-      ret.experimentalLongitudinalAvailable = candidate not in (UNSUPPORTED_LONGITUDINAL_CAR | CAMERA_SCC_CAR)
+      ret.experimentalLongitudinalAvailable = candidate not in (UNSUPPORTED_LONGITUDINAL_CAR | CAMERA_SCC_CAR | NON_SCC_CAR)
     ret.openpilotLongitudinalControl = experimental_long and ret.experimentalLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
 
@@ -110,6 +115,10 @@ class CarInterface(CarInterfaceBase):
     ret.vEgoStarting = 0.1
     ret.startAccel = 1.0
     ret.longitudinalActuatorDelay = 0.5
+
+    # Add HKG longitudinal support
+    if Params().get_bool("HKGtuning"):
+      HKGLongitudinalController(ret).apply_tune(ret)
 
     # *** feature detection ***
     if candidate in CANFD_CAR:
@@ -122,6 +131,11 @@ class CarInterface(CarInterfaceBase):
 
       if 0x544 in fingerprint[0]:
         ret.flags |= HyundaiFlags.NAV_MSG.value
+
+      if ret.flags & HyundaiFlags.MANDO_RADAR and ret.radarUnavailable:
+        ret.flags |= HyundaiFlagsCP.ENABLE_RADAR_TRACKS.value
+        if Params().get_bool("HyundaiRadarTracksAvailable"):
+          ret.radarUnavailable = False
 
     # *** panda safety config ***
     if candidate in CANFD_CAR:
@@ -159,7 +173,8 @@ class CarInterface(CarInterfaceBase):
     elif ret.flags & HyundaiFlags.EV:
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_EV_GAS
 
-    if candidate in (CAR.HYUNDAI_KONA, CAR.HYUNDAI_KONA_EV, CAR.HYUNDAI_KONA_HEV, CAR.HYUNDAI_KONA_EV_2022):
+    if candidate in (CAR.HYUNDAI_KONA, CAR.HYUNDAI_KONA_EV, CAR.HYUNDAI_KONA_HEV, CAR.HYUNDAI_KONA_EV_2022,
+                     CAR.HYUNDAI_KONA_NON_SCC, CAR.HYUNDAI_KONA_EV_NON_SCC):
       ret.flags |= HyundaiFlags.ALT_LIMITS.value
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_ALT_LIMITS
 
@@ -171,10 +186,47 @@ class CarInterface(CarInterfaceBase):
 
     return ret
 
+  #Initialize radar tracks if enabled in FrogPilot Variables.
+  @staticmethod
+  def initialize_radar_tracks(CP, logcan, sendcan):
+    if not (CP.flags & HyundaiFlagsCP.ENABLE_RADAR_TRACKS):
+        return
+
+    params = Params()
+    if not params.get_bool("HyundaiRadarTracks"):
+        return
+
+    # Enable radar tracks config
+    enable_radar_tracks(logcan, sendcan,
+                       bus=0,
+                       addr=0x7d0,
+                       config_data_id=b'\x01\x42')
+
+    # Handle radar tracks availability status
+    CarInterface.update_radar_tracks_availability(params, logcan, CP)
+
+  @staticmethod
+  def update_radar_tracks_availability(params, logcan, CP):
+    rt_avail = params.get_bool("HyundaiRadarTracksAvailable")
+    rt_avail_persist = params.get_bool("HyundaiRadarTracksAvailablePersistent")
+
+    # Cache current availability
+    params.put_bool_nonblocking("HyundaiRadarTracksAvailableCache", rt_avail)
+
+    # Only update persistent status if not already set
+    if not rt_avail_persist:
+        messaging.drain_sock_raw(logcan)
+        fingerprint = can_fingerprint(lambda: get_one_can(logcan))
+        radar_unavailable = RADAR_START_ADDR not in fingerprint[1] or DBC[CP.carFingerprint]["radar"] is None
+
+        params.put_bool_nonblocking("HyundaiRadarTracksAvailable", not radar_unavailable)
+        params.put_bool_nonblocking("HyundaiRadarTracksAvailablePersistent", True)
+
   @staticmethod
   def init(CP, logcan, sendcan):
-    if CP.openpilotLongitudinalControl and not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value):
-      addr, bus = 0x7d0, 0
+    CarInterface.initialize_radar_tracks(CP, logcan, sendcan)
+    if CP.openpilotLongitudinalControl and not (CP.flags & (HyundaiFlags.CANFD_CAMERA_SCC | HyundaiFlags.CAMERA_SCC)):
+      addr, bus = 0x7d0, CanBus(CP).ECAN if CP.carFingerprint in CANFD_CAR else 0
       if CP.flags & HyundaiFlags.CANFD_HDA2.value:
         addr, bus = 0x730, CanBus(CP).ECAN
       disable_ecu(logcan, sendcan, bus=bus, addr=addr, com_cont_req=b'\x28\x83\x01')
@@ -208,6 +260,10 @@ class CarInterface(CarInterfaceBase):
       self.low_speed_alert = False
     if self.low_speed_alert:
       events.add(car.CarEvent.EventName.belowSteerSpeed)
+
+    if frogpilot_toggles.hyundai_radar_tracks and self.CS.params_list.hyundai_radar_tracks_available \
+    and not self.CS.params_list.hyundai_radar_tracks_available_cache:
+      events.add(car.CarEvent.EventName.hyundaiRadarTracksConfirmed)
 
     ret.events = events.to_msg()
 
