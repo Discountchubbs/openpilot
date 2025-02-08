@@ -17,8 +17,8 @@ from openpilot.common.simple_kalman import KF1D
 
 from openpilot.selfdrive.frogpilot.frogpilot_variables import get_frogpilot_toggles
 
-# Default lead acceleration decay set to 50% at 1s
-_LEAD_ACCEL_TAU = 1.5
+# Default lead acceleration decay set to 50% at 1.5s
+_LEAD_ACCEL_TAU = 0.6
 
 # radar tracks
 SPEED, ACCEL = 0, 1     # Kalman filter states enum
@@ -82,7 +82,7 @@ class Track:
 
     # Learn if constant acceleration
     if abs(self.aLeadK) < 0.5:
-      self.aLeadTau = _LEAD_ACCEL_TAU
+      self.aLeadTau = min(max(self.aLeadTau, 1e-2) * 1.1, _LEAD_ACCEL_TAU)
     else:
       self.aLeadTau *= 0.9
 
@@ -185,15 +185,24 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     return None
 
 
-def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float):
-  lead_v_rel_pred = lead_msg.v[0] - model_v_ego
+def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float, frogpilot_toggles: SimpleNamespace):
+  prev_aLeadK = getattr(get_RadarState_from_vision, "prev_aLeadK", 0.0)
+  # Check if match_follow_distance is set to default value (0%), use original unblended value
+  if hasattr(frogpilot_toggles, "match_follow_distance") and frogpilot_toggles.match_follow_distance > 0:
+    blend_factor = frogpilot_toggles.match_follow_distance
+    aLeadK = blend_factor * float(lead_msg.a[0]) + (1 - blend_factor) * prev_aLeadK
+  else:
+    # Use original unblended value if disabled or set to 0%
+    aLeadK = float(lead_msg.a[0])
+  get_RadarState_from_vision.prev_aLeadK = aLeadK
+
   return {
     "dRel": float(lead_msg.x[0] - RADAR_TO_CAMERA),
     "yRel": float(-lead_msg.y[0]),
-    "vRel": float(lead_v_rel_pred),
-    "vLead": float(v_ego + lead_v_rel_pred),
-    "vLeadK": float(v_ego + lead_v_rel_pred),
-    "aLeadK": 0.0,
+    "vRel": float(lead_msg.v[0] - model_v_ego),
+    "vLead": float(v_ego + (lead_msg.v[0] - model_v_ego)),
+    "vLeadK": float(v_ego + (lead_msg.v[0] - model_v_ego)),
+    "aLeadK": aLeadK,
     "aLeadTau": 0.3,
     "fcw": False,
     "modelProb": float(lead_msg.prob),
@@ -217,7 +226,7 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
   if track is not None:
     lead_dict = track.get_RadarState(lead_msg.prob)
   elif (track is None) and ready and (lead_msg.prob > frogpilot_toggles.lead_detection_probability):
-    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
+    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, frogpilot_toggles)
 
   if low_speed_override:
     low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]

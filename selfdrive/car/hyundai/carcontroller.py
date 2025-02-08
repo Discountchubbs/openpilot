@@ -1,15 +1,18 @@
 from cereal import car
+import cereal.messaging as messaging
 from openpilot.common.conversions import Conversions as CV
-from openpilot.common.numpy_fast import clip
+from openpilot.common.numpy_fast import clip, interp
+from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL
 from opendbc.can.packer import CANPacker
 from openpilot.selfdrive.car import apply_driver_steer_torque_limits, common_fault_avoidance
 from openpilot.selfdrive.car.hyundai import hyundaicanfd, hyundaican
 from openpilot.selfdrive.car.hyundai.hyundaicanfd import CanBus
-from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CANFD_CAR, CAR
+from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CANFD_CAR, CAR, CAMERA_SCC_CAR
 from openpilot.selfdrive.car.interfaces import CarControllerBase
 
 from openpilot.selfdrive.frogpilot.controls.lib.frogpilot_acceleration import get_max_allowed_accel
+from openpilot.selfdrive.car.hyundai.chubbs.longitudinal_tuning import HKGLongitudinalController, JerkOutput
 
 VisualAlert = car.CarControl.HUDControl.VisualAlert
 LongCtrlState = car.CarControl.Actuators.LongControlState
@@ -48,6 +51,7 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 class CarController(CarControllerBase):
   def __init__(self, dbc_name, CP, VM):
     self.CP = CP
+    HKGLongitudinalController.__init__(self, CP)
     self.CAN = CanBus(CP)
     self.params = CarControllerParams(CP)
     self.packer = CANPacker(dbc_name)
@@ -62,6 +66,7 @@ class CarController(CarControllerBase):
   def update(self, CC, CS, now_nanos, frogpilot_toggles):
     actuators = CC.actuators
     hud_control = CC.hudControl
+    accel = actuators.accel
 
     # steering torque
     new_steer = int(round(actuators.steer * self.params.STEER_MAX))
@@ -80,11 +85,26 @@ class CarController(CarControllerBase):
 
     self.apply_steer_last = apply_steer
 
-    # accel + longitudinal
-    if frogpilot_toggles.sport_plus:
+    # Accel + Longitudinal control
+    if hasattr(self, 'tuning') and self.tuning is not None:
+      #accel = self.tuning.update(accel, actuators, CS)
+      accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, CarControllerParams.ACCEL_MAX))
+    elif self.tuning is not None and frogpilot_toggles.sport_plus:
+      #accel = self.tuning.update(accel, actuators, CS)
+      accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, get_max_allowed_accel(CS.out.vEgo)))
+    elif frogpilot_toggles.sport_plus:
       accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, get_max_allowed_accel(CS.out.vEgo)))
     else:
       accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, CarControllerParams.ACCEL_MAX))
+
+    # Handle jerk
+    if hasattr(self, 'tuning') and self.tuning is not None:
+      jerk = self.tuning.get_jerk()
+    else:
+      # Default jerk values if no tuning
+      normal_jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
+      jerk = JerkOutput(normal_jerk, normal_jerk, 0.0, 0.0)
+
     stopping = actuators.longControlState == LongCtrlState.stopping
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
 
@@ -97,9 +117,10 @@ class CarController(CarControllerBase):
     # *** common hyundai stuff ***
 
     # tester present - w/ no response (keeps relevant ECU disabled)
-    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and self.CP.openpilotLongitudinalControl:
+    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and \
+      self.CP.carFingerprint not in CAMERA_SCC_CAR and self.CP.openpilotLongitudinalControl:
       # for longitudinal control, either radar or ADAS driving ECU
-      addr, bus = 0x7d0, 0
+      addr, bus = 0x7d0, self.CAN.ECAN if self.CP.carFingerprint in CANFD_CAR else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
         addr, bus = 0x730, self.CAN.ECAN
       can_sends.append([addr, 0, b"\x02\x3E\x80\x00\x00\x00\x00\x00", bus])
@@ -122,8 +143,11 @@ class CarController(CarControllerBase):
                                                           self.CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING))
 
       # LFA and HDA icons
-      if self.frame % 5 == 0 and (not hda2 or hda2_long):
+      if self.frame % 5 == 0 and (not hda2 or hda2_long) and self.car_fingerprint not in (CAR.KIA_K5_2025):
         can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, CC.latActive))
+      if self.frame % 5 == 0 and (not hda2 or hda2_long) and self.car_fingerprint in (CAR.KIA_K5_2025):
+        can_sends.append(hyundaicanfd.create_msg_161(self.packer, self.CAN, CC.enabled, CS.msg_161, self.CP, hud_control, CS, CC, self.frame))
+        can_sends.append(hyundaicanfd.create_msg_162(self.packer, self.CAN, CC.enabled, CS.msg_162, self.CP, hud_control, CS))
 
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
@@ -132,9 +156,11 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         if hda2:
           can_sends.extend(hyundaicanfd.create_adrv_messages(self.packer, self.CAN, self.frame))
+        else:
+          can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
-          can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                           set_speed_in_units, hud_control))
+          can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CS, CC.enabled, self.accel_last, accel, jerk,
+                                                           stopping, CC.cruiseControl.override, set_speed_in_units, hud_control))
           self.accel_last = accel
       else:
         # button presses
@@ -148,13 +174,12 @@ class CarController(CarControllerBase):
       if not self.CP.openpilotLongitudinalControl:
         can_sends.extend(self.create_button_messages(CC, CS, use_clu11=True))
 
+
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
-        # TODO: unclear if this is needed
-        jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
         use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
-        can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
-                                                        hud_control, set_speed_in_units, stopping,
-                                                        CC.cruiseControl.override, use_fca, CS.out.cruiseState.available))
+        can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk,
+                                                        int(self.frame / 2), hud_control, set_speed_in_units, stopping,
+                                                        CC.cruiseControl.override, use_fca, CS, self.CP, CS.out.cruiseState.available))
 
       # 20 Hz LFA MFA message
       if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
@@ -162,7 +187,7 @@ class CarController(CarControllerBase):
 
       # 5 Hz ACC options
       if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl:
-        can_sends.extend(hyundaican.create_acc_opt(self.packer))
+        can_sends.extend(hyundaican.create_acc_opt(self.packer, CS, self.CP))
 
       # 2 Hz front radar options
       if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl:
