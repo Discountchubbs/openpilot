@@ -87,24 +87,21 @@ class CarController(CarControllerBase):
     self.apply_steer_last = apply_steer
 
     # Accel + Longitudinal control
-    if hasattr(self, 'tuning') and self.tuning is not None:
-      #accel = self.tuning.update(accel, actuators, CS)
-      accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, CarControllerParams.ACCEL_MAX))
+    normal_jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
+
+    if self.tuning is not None:
+      accel = self.tuning.calculate_limited_accel(actuators.accel, actuators, CS)
+      accel = clip(accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, CarControllerParams.ACCEL_MAX))
+      self.jerk = self.tuning.get_jerk()
     elif self.tuning is not None and frogpilot_toggles.sport_plus:
-      #accel = self.tuning.update(accel, actuators, CS)
-      accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, get_max_allowed_accel(CS.out.vEgo)))
+      accel = self.tuning.calculate_limited_accel(actuators.accel, actuators, CS)
+      accel = clip(accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, get_max_allowed_accel(CS.out.vEgo)))
+      self.jerk = self.tuning.get_jerk()
     elif frogpilot_toggles.sport_plus:
       accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, get_max_allowed_accel(CS.out.vEgo)))
+      self.jerk = JerkOutput(normal_jerk, normal_jerk, 0.0, 0.0)
     else:
       accel = clip(actuators.accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, CarControllerParams.ACCEL_MAX))
-
-    # Handle jerk
-    if hasattr(self, 'tuning') and self.tuning is not None:
-      self.tuning.make_jerk(CS, accel, actuators)
-      self.jerk = self.tuning.get_jerk()
-    else:
-      # Default jerk values if no tuning
-      normal_jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
       self.jerk = JerkOutput(normal_jerk, normal_jerk, 0.0, 0.0)
 
     stopping = actuators.longControlState == LongCtrlState.stopping

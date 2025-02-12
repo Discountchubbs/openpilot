@@ -200,7 +200,7 @@ frogpilot_default_params: list[tuple[str, str | bytes, int]] = [
   ("MapsSelected", "", 0),
   ("MapStyle", "0", 2),
   ("MapTurnControl", "1", 1),
-  ("MatchFollowDistance", "80", 3),
+  ("MatchFollowDistance", "80", 2),
   ("MaxDesiredAcceleration", "4.0", 3),
   ("MinimumLaneChangeSpeed", str(LANE_CHANGE_SPEED_MIN / CV.MPH_TO_MS), 2),
   ("Model", DEFAULT_CLASSIC_MODEL, 1),
