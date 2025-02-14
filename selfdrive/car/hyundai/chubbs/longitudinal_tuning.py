@@ -174,7 +174,7 @@ class HKGLongitudinalTuning:
     return accel
 
   def apply_tune(self, CP: Any) -> None:
-    CP.vEgoStopping = 0.3
+    CP.vEgoStopping = 0.1
     CP.vEgoStarting = 0.1
     CP.stoppingDecelRate = 0.01
     CP.startAccel = 1.0 if bool(CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV)) else 1.6
