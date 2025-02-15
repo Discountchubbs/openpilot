@@ -31,7 +31,6 @@ locks = {
   "download_theme": threading.Lock(),
   "flash_panda": threading.Lock(),
   "lock_doors": threading.Lock(),
-  "send_sentry_reports": threading.Lock(),
   "update_checks": threading.Lock(),
   "update_maps": threading.Lock(),
   "update_models": threading.Lock(),
@@ -83,7 +82,7 @@ def calculate_road_curvature(modelData, v_ego):
 def delete_file(path):
   path = Path(path)
   try:
-    if path.is_file():
+    if path.is_file() or path.is_symlink():
       path.unlink()
       print(f"Deleted file: {path}")
     elif path.is_dir():
@@ -114,7 +113,7 @@ def flash_panda():
   Panda().wait_for_panda(None, 30)
   params_memory.put_bool("FlashPanda", False)
 
-def is_url_pingable(url, timeout=5):
+def is_url_pingable(url, timeout=10):
   try:
     request = urllib.request.Request(
       url,
@@ -173,17 +172,6 @@ def run_cmd(cmd, success_message, fail_message):
     print(f"Unexpected error occurred: {error}")
     print(fail_message)
     sentry.capture_exception(error)
-
-def send_sentry_reports(frogpilot_toggles, frogpilot_variables, params, params_tracking):
-  if params.get_bool("UserLogged"):
-    return
-
-  while not is_url_pingable("https://sentry.io"):
-    time.sleep(1)
-
-  sentry.capture_user_report(frogpilot_variables.short_branch, frogpilot_toggles, params, params_tracking)
-
-  params.put_bool("UserLogged", True)
 
 def update_maps(now):
   while not MAPD_PATH.exists():

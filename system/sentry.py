@@ -16,9 +16,9 @@ from openpilot.selfdrive.frogpilot.frogpilot_variables import CRASHES_DIR
 
 class SentryProject(Enum):
   # python project
-  SELFDRIVE = "https://5ad1714d27324c74a30f9c538bff3b8d@o4505034923769856.ingest.us.sentry.io/4505034930651136"
+  SELFDRIVE = "https://0c2fea9f108f30f51d26ee7d259580ea@o4505034923769856.ingest.us.sentry.io/4505034930651136"
   # native project
-  SELFDRIVE_NATIVE = "https://5ad1714d27324c74a30f9c538bff3b8d@o4505034923769856.ingest.us.sentry.io/4505034930651136"
+  SELFDRIVE_NATIVE = "https://0c2fea9f108f30f51d26ee7d259580ea@o4505034923769856.ingest.us.sentry.io/4505034930651136"
 
 
 def report_tombstone(fn: str, message: str, contents: str) -> None:
@@ -50,55 +50,6 @@ def capture_exception(*args, **kwargs) -> None:
     sentry_sdk.flush()  # https://github.com/getsentry/sentry-python/issues/291
   except Exception:
     cloudlog.exception("sentry exception")
-
-
-def capture_user_report(branch, frogpilot_toggles, params, params_tracking):
-  if frogpilot_toggles.block_user:
-    sentry_sdk.capture_message("Blocked user from using the development branch", level="warning")
-    sentry_sdk.flush()
-    return
-
-  param_types = {
-    "FrogPilot Controls": ParamKeyType.FROGPILOT_CONTROLS,
-    "FrogPilot Vehicles": ParamKeyType.FROGPILOT_VEHICLES,
-    "FrogPilot Visuals": ParamKeyType.FROGPILOT_VISUALS,
-    "FrogPilot Other": ParamKeyType.FROGPILOT_OTHER,
-    "FrogPilot Tracking": ParamKeyType.FROGPILOT_TRACKING,
-  }
-
-  matched_params = {label: {} for label in param_types}
-  for key in params.all_keys():
-    for label, key_type in param_types.items():
-      if params.get_key_type(key) & key_type:
-        if key_type == ParamKeyType.FROGPILOT_TRACKING:
-          value = f"{params_tracking.get_int(key):,}"
-        else:
-          if isinstance(params.get(key), bytes):
-            value = params.get(key, encoding="utf-8")
-          else:
-            value = params.get(key) or "0"
-
-        if isinstance(value, str) and "." in value:
-          value = value.rstrip("0").rstrip(".")
-        matched_params[label][key.decode("utf-8")] = value
-
-  with sentry_sdk.push_scope() as scope:
-    for label, key_values in matched_params.items():
-      scope.set_context(label, key_values)
-
-    fingerprint = [params.get("DongleId", encoding="utf-8")]
-    scope.fingerprint = fingerprint
-
-    title = (
-      f"Logged user: {fingerprint} - "
-      f"{branch} - "
-      f"{frogpilot_toggles.car_make.capitalize()} - "
-      f"{frogpilot_toggles.car_model} - "
-      f"{frogpilot_toggles.model_name.replace(' (Default)', '')}"
-    )
-
-    sentry_sdk.capture_message(title, level="info")
-    sentry_sdk.flush()
 
 
 def capture_report(discord_user, report, frogpilot_toggles):
