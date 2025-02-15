@@ -5,6 +5,7 @@ import tomllib
 from abc import abstractmethod, ABC
 from difflib import SequenceMatcher
 from enum import StrEnum
+from types import SimpleNamespace
 from typing import Any, NamedTuple
 from collections.abc import Callable
 from functools import cache
@@ -21,6 +22,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CRUISE_LONG_PRESS, V_
 from openpilot.selfdrive.controls.lib.events import Events
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
+from openpilot.selfdrive.car.hyundai.chubbs.param_manager import ParamManager
 from openpilot.selfdrive.frogpilot.frogpilot_variables import get_frogpilot_toggles, params, params_memory
 
 ButtonType = car.CarState.ButtonEvent.Type
@@ -387,11 +389,13 @@ class CarInterfaceBase(ABC):
   def _update(self, c: car.CarControl) -> car.CarState:
     pass
 
-  def update(self, c: car.CarControl, can_strings: list[bytes], frogpilot_toggles) -> car.CarState:
+  def update(self, c: car.CarControl, can_strings: list[bytes], params_list: SimpleNamespace, frogpilot_toggles) -> car.CarState:
     # parse can
     for cp in self.can_parsers:
       if cp is not None:
         cp.update_strings(can_strings)
+
+    self.CS.params_list = params_list
 
     # get CarState
     ret, fp_ret = self._update(c, frogpilot_toggles)
@@ -553,6 +557,8 @@ class CarStateBase(ABC):
     self.CP = CP
     self.car_fingerprint = CP.carFingerprint
     self.out = car.CarState.new_message()
+
+    self.params_list: SimpleNamespace = ParamManager().get_params()
 
     self.cruise_buttons = 0
     self.left_blinker_cnt = 0

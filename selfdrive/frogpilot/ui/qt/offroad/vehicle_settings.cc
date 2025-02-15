@@ -156,6 +156,8 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(FrogPilotSettingsWindow *parent) 
     {"LongPitch", tr("Smoothen Pedal Response While Going Downhill/Uphill"), tr("Smoothen the gas and brake response when driving downhill or uphill."), ""},
 
     {"HKGToggles", tr("Hyundai/Kia/Genesis Toggles"), tr("Toggles catered towards 'Hyundai/Kia/Genesis' vehicles."), ""},
+    {"HKGtuning", tr("Chubbs' Custom Tuning"), tr("Chubbs' Custom tuning for Hyundai/Kia/Genesis vehicles, which smoothes acceleration and braking to help achieve a 'limo' stop."), ""},
+    {"HyundaiRadarTracks", tr("Enable Radar Tracks"), tr("Enable this to attempt to enable radar tracks for Hyundai, Kia, and Genesis models equipped with the supported Mando SCC radar."), ""},
     {"NewLongAPI", tr("Enable comma's New Longitudinal API"), tr("Enable comma's new longitudinal control system that has shown great improvement with acceleration and braking, but has issues on some Hyundai/Kia/Genesis vehicles."), ""},
 
     {"ToyotaToggles", tr("Toyota/Lexus Toggles"), tr("Toggles catered towards 'Toyota/Lexus' vehicles."), ""},
@@ -184,6 +186,10 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(FrogPilotSettingsWindow *parent) 
       });
       vehicleToggle = hkgToggle;
 
+    } else if (param == "HKGtuning") {
+      std::vector<QString> button_texts{tr("Smoother Braking")};
+      std::vector<QString> braking_params{"HKGBraking"};
+      vehicleToggle = new FrogPilotButtonToggleControl(param, title, desc, icon, braking_params, button_texts);
     } else if (param == "ToyotaToggles") {
       ButtonControl *toyotaToggle = new ButtonControl(title, tr("MANAGE"), desc);
       QObject::connect(toyotaToggle, &ButtonControl::clicked, [this]() {

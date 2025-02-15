@@ -137,7 +137,7 @@ FrogPilotSettingsWindow::FrogPilotSettingsWindow(SettingsWindow *parent) : QFram
                                           togglePresets, true);
 
   int timeTo100FPHours = 100 - (paramsTracking.getInt("FrogPilotMinutes") / 60);
-  int timeTo250OPHours = 250 - (params.getInt("openpilotMinutes") / 60);
+  int timeTo250OPHours = 50 - (params.getInt("openpilotMinutes") / 60);
   togglePreset->setEnabledButtons(3, timeTo100FPHours <= 0 || timeTo250OPHours <= 0);
 
   QObject::connect(togglePreset, &FrogPilotButtonsControl::buttonClicked, [this](int id) {
