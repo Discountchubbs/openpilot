@@ -89,10 +89,10 @@ class CarController(CarControllerBase):
     # Accel + Longitudinal control
     normal_jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
 
-    if Params.get_bool("HKGBraking") and self.tuning is not None:
+    if Params().get_bool("HKGBraking") and self.tuning is not None:
       accel = self.tuning.calculate_limited_accel(actuators.accel, actuators, CS)
       accel = clip(accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, CarControllerParams.ACCEL_MAX))
-    elif Params.get_bool("HKGBraking") and self.tuning is not None and frogpilot_toggles.sport_plus:
+    elif Params().get_bool("HKGBraking") and self.tuning is not None and frogpilot_toggles.sport_plus:
       accel = self.tuning.calculate_limited_accel(actuators.accel, actuators, CS)
       accel = clip(accel, CarControllerParams.ACCEL_MIN, min(frogpilot_toggles.max_desired_acceleration, get_max_allowed_accel(CS.out.vEgo)))
     elif frogpilot_toggles.sport_plus:
