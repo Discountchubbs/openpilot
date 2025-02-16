@@ -1941,6 +1941,14 @@ This overrides &apos;Conditional Experimental Mode&apos;.</source>
         <source> second</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Match Follow Distance - %</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The higher the percentage the more 1:1 the follow distance. 80% is 1:1 follow distance.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>FrogPilotManageControl</name>
@@ -2641,6 +2649,14 @@ Want to submit your own animations? Share them in the &apos;custom-themes&apos; 
         <source>Enter the text for the bottom half</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Brake Indicator</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Turns current speed value to red when the brake pedal is pressed.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>FrogPilotUtilitiesPanel</name>
@@ -2893,6 +2909,26 @@ Want to submit your own animations? Share them in the &apos;custom-themes&apos; 
     </message>
     <message>
         <source>MANAGE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Chubbs&apos; Custom Tuning</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Chubbs&apos; Custom tuning for Hyundai/Kia/Genesis vehicles, which smoothes acceleration and braking to help achieve a &apos;limo&apos; stop.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Radar Tracks</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable this to attempt to enable radar tracks for Hyundai, Kia, and Genesis models equipped with the supported Mando SCC radar.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Smoother Braking</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
